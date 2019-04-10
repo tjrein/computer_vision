@@ -95,7 +95,6 @@ def convolve_pixel(img, kernel, i, j):
     if (up < 0) or (left < 0) or (down >= img.shape[0]) or (right >= img.shape[1]):
         outofbounds = True
 
-    # TODO: Check if the kernel stretches beyond the border of the image.
     if outofbounds:
         return img[i][j]
     else:
@@ -167,7 +166,8 @@ def merge(r, g, b):
     Returns:
         A height x width x 3 ndarray representing the color image.
     """
-    # TODO: Implement me
+
+    return np.dstack((r, g, b))
 
 
 """
