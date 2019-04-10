@@ -38,8 +38,6 @@ def create_gaussian_kernel(size, sigma=1.0):
     if size % 2 != 1:
         raise ValueError('The size of the kernel should not be even.')
 
-    # TODO: Create a size by size ndarray of type float32
-
     rv = np.empty([size, size], dtype=np.float32)
     k = int((size - 1) / 2)
 
@@ -48,13 +46,8 @@ def create_gaussian_kernel(size, sigma=1.0):
             exp_arg = -(x ** 2 + y ** 2) / sigma ** 2
             rv[x + k][y + k] = (1 / (2 * np.pi * sigma ** 2)) * np.exp(exp_arg)
 
-    # TODO: Populate the values of the kernel. Note that the middle `pixel` should be x = 0 and y = 0.
-
-    # TODO:  Normalize the values such that the sum of the kernel = 1
-
     rv = np.divide(rv, np.sum(rv))
     return rv
-
 
 def convolve_pixel(img, kernel, i, j):
     """
@@ -82,12 +75,40 @@ def convolve_pixel(img, kernel, i, j):
             'The size of the kernel should not be even, but got shape %s' % (str(kernel.shape)))
 
     # TODO: determine, using the kernel shape, the ith and jth locations to start at.
+    k = int((kernel.shape[0] -1) / 2)
+
+    outofbounds = False
+
+    up = i - k
+    down = i + k
+    left = j - k
+    right = j + k
+
+    #print("img", img[i][j])
+    #print("up", up)
+    #print("down", down)
+    #print("left", left)
+    #print("right", right)
+
+    #print(img.shape)
+    counter = 1
+    if (up < 0) or (left < 0) or (down >= img.shape[0]) or (right >= img.shape[1]):
+        outofbounds = True
 
     # TODO: Check if the kernel stretches beyond the border of the image.
-    #if .....:
-        # TODO: if so, return the input pixel at that location.
-    #else:
-        # TODO: perform the convolution.
+    if outofbounds:
+        return img[i][j]
+    else:
+        values = []
+        for u in range(-k, k+1):
+            for v in range(-k, k+1):
+                h = kernel[u + k][v + k]
+                value = h * img[i + u][j + v]
+                values.append(value)
+
+        result = np.sum(np.array(values))
+        return result
+
 
 
 def convolve(img, kernel):
@@ -101,10 +122,15 @@ def convolve(img, kernel):
     Returns:
         The result of convolving the provided kernel with the image at location i, j.
     """
-    # TODO: Make a copy of the input image to save results
 
-    # TODO: Populate each pixel in the input by calling convolve_pixel and return results.
+    results = np.empty(img.shape)
+    for i in range(0, img.shape[0]):
+        for j in range(0, img.shape[1]):
+            pixel = convolve_pixel(img, kernel, i, j)
+            results[i][j] = pixel
 
+    results = np.array(np.around(results), dtype=np.uint8)
+    return results
 
 def split(img):
     """
