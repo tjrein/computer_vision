@@ -40,10 +40,19 @@ def create_gaussian_kernel(size, sigma=1.0):
 
     # TODO: Create a size by size ndarray of type float32
 
+    rv = np.empty([size, size], dtype=np.float32)
+    k = int((size - 1) / 2)
+
+    for x in range(-k, k + 1):
+        for y in range(-k, k + 1):
+            exp_arg = -(x ** 2 + y ** 2) / sigma ** 2
+            rv[x + k][y + k] = (1 / (2 * np.pi * sigma ** 2)) * np.exp(exp_arg)
+
     # TODO: Populate the values of the kernel. Note that the middle `pixel` should be x = 0 and y = 0.
 
     # TODO:  Normalize the values such that the sum of the kernel = 1
 
+    rv = np.divide(rv, np.sum(rv))
     return rv
 
 
