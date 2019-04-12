@@ -43,7 +43,7 @@ def create_gaussian_kernel(size, sigma=1.0):
 
     for x in range(-k, k + 1):
         for y in range(-k, k + 1):
-            exp_arg = -(x ** 2 + y ** 2) / sigma ** 2
+            exp_arg = -(x ** 2 + y ** 2) / (2 * sigma ** 2 )
             rv[x + k][y + k] = (1 / (2 * np.pi * sigma ** 2)) * np.exp(exp_arg)
 
     rv = np.divide(rv, np.sum(rv))
