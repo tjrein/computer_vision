@@ -17,6 +17,21 @@ def load_image(filename):
     print(im)
     return np.array(im)
 
+def create_1d_kernel(size, sigma=1.0):
+    if size % 2 != 1:
+        raise ValueError('The size of the kernel should not be even.')
+
+    rv = np.empty([size, 1], dtype=np.float32)
+    k = int((size - 1) / 2)
+
+    for x in range(-k, k + 1):
+        exp_arg = -0.5 * (x ** 2 / sigma ** 2 )
+        rv[x + k] = 1 / (np.sqrt(2 * np.pi * sigma**2)) * np.exp(exp_arg)
+
+    rv = np.divide(rv, np.sum(rv))
+
+    return rv
+
 
 def create_gaussian_kernel(size, sigma=1.0):
     """
@@ -49,6 +64,58 @@ def create_gaussian_kernel(size, sigma=1.0):
     rv = np.divide(rv, np.sum(rv))
     return rv
 
+def convolve_intermediate(img, kernel, i, j):
+    """
+    Convolves the provided kernel with the image at location i,j, and returns the result.
+    If the kernel stretches beyond the border of the image, it returns the original pixel.
+
+    Args:
+        img:        A 2-dimensional ndarray input image.
+        kernel:     A 2-dimensional kernel to convolve with the image.
+        i (int):    The row location to do the convolution at.
+        j (int):    The column location to process.
+
+    Returns:
+        The result of convolving the provided kernel with the image at location i, j.
+    """
+
+    # First let's validate the inputs are the shape we expect...
+    if len(img.shape) != 2:
+        raise ValueError(
+            'Image argument to convolve_pixel should be one channel.')
+    if len(kernel.shape) != 2:
+        raise ValueError('The kernel should be two dimensional.')
+    if kernel.shape[0] % 2 != 1 or kernel.shape[1] % 2 != 1:
+        raise ValueError(
+            'The size of the kernel should not be even, but got shape %s' % (str(kernel.shape)))
+
+    # TODO: determine, using the kernel shape, the ith and jth locations to start at.
+    k = int((kernel.shape[1] -1) / 2)
+
+    outofbounds = False
+
+    up = i - k
+    down = i + k
+    left = j - k
+    right = j + k
+
+    #print(img.shape)
+    counter = 1
+    if up < 0 or down >= img.shape[1]:
+        outofbounds = True
+
+    if outofbounds:
+        return img[i][j]
+    else:
+        values = []
+        for u in range(-k, k+1):
+            h = kernel[0][u + k]
+            value = h * img[i - u][j]
+            values.append(value)
+
+        result = np.sum(np.array(values))
+        return result
+
 def convolve_pixel(img, kernel, i, j):
     """
     Convolves the provided kernel with the image at location i,j, and returns the result.
@@ -77,21 +144,17 @@ def convolve_pixel(img, kernel, i, j):
     # TODO: determine, using the kernel shape, the ith and jth locations to start at.
     k = int((kernel.shape[0] -1) / 2)
 
+
     outofbounds = False
 
     up = i - k
     down = i + k
     left = j - k
     right = j + k
-    #print("img", img[i][j])
-    #print("up", up)
-    #print("down", down)
-    #print("left", left)
-    #print("right", right)
 
     #print(img.shape)
     counter = 1
-    if (up < 0) or (left < 0) or (down >= img.shape[0]) or (right >= img.shape[1]):
+    if (left < 0 or right >= img.shape[1]):
         outofbounds = True
 
     if outofbounds:
@@ -99,17 +162,16 @@ def convolve_pixel(img, kernel, i, j):
     else:
         values = []
         for u in range(-k, k+1):
-            for v in range(-k, k+1):
-                h = kernel[u + k][v + k]
-                value = h * img[i + u][j + v]
-                values.append(value)
+            h = kernel[u + k][0]
+            value = h * img[i][j - u]
+            values.append(value)
 
         result = np.sum(np.array(values))
         return result
 
 
 
-def convolve(img, kernel):
+def convolve(img, d1, d2):
     """
     Convolves the provided kernel with the provided image and returns the results.
 
@@ -121,13 +183,23 @@ def convolve(img, kernel):
         The result of convolving the provided kernel with the image at location i, j.
     """
 
+    intermediate = np.empty(img.shape)
+
+    for i in range(0, img.shape[0]):
+        for j in range(0, img.shape[1]):
+            pixel = convolve_pixel(img, d1, i, j)
+            intermediate[i][j] = pixel
+
+    intermediate = np.array(np.around(intermediate), dtype=np.uint8)
+
     results = np.empty(img.shape)
     for i in range(0, img.shape[0]):
         for j in range(0, img.shape[1]):
-            pixel = convolve_pixel(img, kernel, i, j)
+            pixel = convolve_intermediate(intermediate, d2, i, j)
             results[i][j] = pixel
 
     results = np.array(np.around(results), dtype=np.uint8)
+
     return results
 
 def split(img):
@@ -197,17 +269,21 @@ if __name__ == '__main__':
     # compute the gaussian kernel
     logging.info('Computing a gaussian kernel with size %d and sigma %f' %
                  (args.k, args.sigma))
-    kernel = create_gaussian_kernel(args.k, args.sigma)
 
-    # convolve it with each input channel
+    #kernel = create_gaussian_kernel(args.k, args.sigma)
+
+    d1 = create_1d_kernel(args.k, args.sigma)
+    d2 = d1.T
+
+    #convolve it with each input channel
     logging.info('Convolving the first channel')
-    r = convolve(r, kernel)
+    r = convolve(r, d1, d2)
     logging.info('Convolving the second channel')
-    g = convolve(g, kernel)
+    g = convolve(g, d1, d2)
     logging.info('Convolving the third channel')
-    b = convolve(b, kernel)
+    b = convolve(b, d1, d2)
 
-    # merge the channels back
+    #merge the channels back
     logging.info('Merging results')
     resultImage = merge(r, g, b)
 
