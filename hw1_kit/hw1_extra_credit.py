@@ -18,22 +18,6 @@ def load_image(filename):
     return np.array(im)
 
 def create_1d_kernel(size, sigma=1.0):
-    if size % 2 != 1:
-        raise ValueError('The size of the kernel should not be even.')
-
-    rv = np.empty([size, 1], dtype=np.float32)
-    k = int((size - 1) / 2)
-
-    for x in range(-k, k + 1):
-        exp_arg = -0.5 * (x ** 2 / sigma ** 2 )
-        rv[x + k] = 1 / (np.sqrt(2 * np.pi * sigma**2)) * np.exp(exp_arg)
-
-    rv = np.divide(rv, np.sum(rv))
-
-    return rv
-
-
-def create_gaussian_kernel(size, sigma=1.0):
     """
     Creates a 2-dimensional, size x size gaussian kernel.
     It is normalized such that the sum over all values = 1.
@@ -49,22 +33,21 @@ def create_gaussian_kernel(size, sigma=1.0):
         https://en.wikipedia.org/wiki/Multivariate_normal_distribution
     """
 
-    # Ensure the parameter passed is odd
     if size % 2 != 1:
         raise ValueError('The size of the kernel should not be even.')
 
-    rv = np.empty([size, size], dtype=np.float32)
+    rv = np.empty(size, dtype=np.float32)
     k = int((size - 1) / 2)
 
     for x in range(-k, k + 1):
-        for y in range(-k, k + 1):
-            exp_arg = -(x ** 2 + y ** 2) / (2 * sigma ** 2 )
-            rv[x + k][y + k] = (1 / (2 * np.pi * sigma ** 2)) * np.exp(exp_arg)
+        exp_arg = -0.5 * (x ** 2 / sigma ** 2 )
+        rv[x + k] = 1 / (np.sqrt(2 * np.pi * sigma**2)) * np.exp(exp_arg)
 
     rv = np.divide(rv, np.sum(rv))
+
     return rv
 
-def convolve_intermediate(img, kernel, i, j):
+def convolve_pixel(img, kernel, i, j, orientation):
     """
     Convolves the provided kernel with the image at location i,j, and returns the result.
     If the kernel stretches beyond the border of the image, it returns the original pixel.
@@ -83,67 +66,13 @@ def convolve_intermediate(img, kernel, i, j):
     if len(img.shape) != 2:
         raise ValueError(
             'Image argument to convolve_pixel should be one channel.')
-    if len(kernel.shape) != 2:
-        raise ValueError('The kernel should be two dimensional.')
-    if kernel.shape[0] % 2 != 1 or kernel.shape[1] % 2 != 1:
-        raise ValueError(
-            'The size of the kernel should not be even, but got shape %s' % (str(kernel.shape)))
+    #if len(kernel.shape) != 2:
+    #    raise ValueError('The kernel should be two dimensional.')
+    #if kernel.shape[0] % 2 != 1 or kernel.shape[1] % 2 != 1:
+    #    raise ValueError(
+    #        'The size of the kernel should not be even, but got shape %s' % (str(kernel.shape)))
 
-    # TODO: determine, using the kernel shape, the ith and jth locations to start at.
-    k = int((kernel.shape[1] -1) / 2)
-
-    outofbounds = False
-
-    up = i - k
-    down = i + k
-    left = j - k
-    right = j + k
-
-    #print(img.shape)
-    counter = 1
-    if up < 0 or down >= img.shape[1]:
-        outofbounds = True
-
-    if outofbounds:
-        return img[i][j]
-    else:
-        values = []
-        for u in range(-k, k+1):
-            h = kernel[0][u + k]
-            value = h * img[i - u][j]
-            values.append(value)
-
-        result = np.sum(np.array(values))
-        return result
-
-def convolve_pixel(img, kernel, i, j):
-    """
-    Convolves the provided kernel with the image at location i,j, and returns the result.
-    If the kernel stretches beyond the border of the image, it returns the original pixel.
-
-    Args:
-        img:        A 2-dimensional ndarray input image.
-        kernel:     A 2-dimensional kernel to convolve with the image.
-        i (int):    The row location to do the convolution at.
-        j (int):    The column location to process.
-
-    Returns:
-        The result of convolving the provided kernel with the image at location i, j.
-    """
-
-    # First let's validate the inputs are the shape we expect...
-    if len(img.shape) != 2:
-        raise ValueError(
-            'Image argument to convolve_pixel should be one channel.')
-    if len(kernel.shape) != 2:
-        raise ValueError('The kernel should be two dimensional.')
-    if kernel.shape[0] % 2 != 1 or kernel.shape[1] % 2 != 1:
-        raise ValueError(
-            'The size of the kernel should not be even, but got shape %s' % (str(kernel.shape)))
-
-    # TODO: determine, using the kernel shape, the ith and jth locations to start at.
-    k = int((kernel.shape[0] -1) / 2)
-
+    k = int((kernel.shape[0] - 1) / 2)
 
     outofbounds = False
 
@@ -153,23 +82,30 @@ def convolve_pixel(img, kernel, i, j):
     right = j + k
 
     #print(img.shape)
-    counter = 1
-    if (left < 0 or right >= img.shape[1]):
-        outofbounds = True
+    if orientation is 'horizontal':
+        if left < 0 or right >= img.shape[1]:
+            outofbounds = True
+    else:
+        if up < 0 or down >= img.shape[1]:
+            outofbounds = True
 
     if outofbounds:
         return img[i][j]
     else:
         values = []
         for u in range(-k, k+1):
-            h = kernel[u + k][0]
-            value = h * img[i][j - u]
+            h = kernel[u + k]
+            value = None
+
+            if orientation is 'horizontal':
+                value = h * img[i][j - u]
+            else:
+                value = h * img[i - u][j]
+
             values.append(value)
 
         result = np.sum(np.array(values))
         return result
-
-
 
 def convolve(img, d1, d2):
     """
@@ -187,7 +123,7 @@ def convolve(img, d1, d2):
 
     for i in range(0, img.shape[0]):
         for j in range(0, img.shape[1]):
-            pixel = convolve_pixel(img, d1, i, j)
+            pixel = convolve_pixel(img, d1, i, j, 'horizontal')
             intermediate[i][j] = pixel
 
     intermediate = np.array(np.around(intermediate), dtype=np.uint8)
@@ -195,7 +131,7 @@ def convolve(img, d1, d2):
     results = np.empty(img.shape)
     for i in range(0, img.shape[0]):
         for j in range(0, img.shape[1]):
-            pixel = convolve_intermediate(intermediate, d2, i, j)
+            pixel = convolve_pixel(intermediate, d1, i, j, 'vertical')
             results[i][j] = pixel
 
     results = np.array(np.around(results), dtype=np.uint8)
@@ -269,8 +205,6 @@ if __name__ == '__main__':
     # compute the gaussian kernel
     logging.info('Computing a gaussian kernel with size %d and sigma %f' %
                  (args.k, args.sigma))
-
-    #kernel = create_gaussian_kernel(args.k, args.sigma)
 
     d1 = create_1d_kernel(args.k, args.sigma)
     d2 = d1.T
