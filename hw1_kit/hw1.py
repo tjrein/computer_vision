@@ -74,7 +74,6 @@ def convolve_pixel(img, kernel, i, j):
         raise ValueError(
             'The size of the kernel should not be even, but got shape %s' % (str(kernel.shape)))
 
-    # TODO: determine, using the kernel shape, the ith and jth locations to start at.
     k = int((kernel.shape[0] -1) / 2)
 
     outofbounds = False
@@ -83,13 +82,7 @@ def convolve_pixel(img, kernel, i, j):
     down = i + k
     left = j - k
     right = j + k
-    #print("img", img[i][j])
-    #print("up", up)
-    #print("down", down)
-    #print("left", left)
-    #print("right", right)
 
-    #print(img.shape)
     counter = 1
     if (up < 0) or (left < 0) or (down >= img.shape[0]) or (right >= img.shape[1]):
         outofbounds = True

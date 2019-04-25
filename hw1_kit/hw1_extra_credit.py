@@ -53,10 +53,11 @@ def convolve_pixel(img, kernel, i, j, orientation):
     If the kernel stretches beyond the border of the image, it returns the original pixel.
 
     Args:
-        img:        A 2-dimensional ndarray input image.
-        kernel:     A 2-dimensional kernel to convolve with the image.
-        i (int):    The row location to do the convolution at.
-        j (int):    The column location to process.
+        img:            A 2-dimensional ndarray input image.
+        kernel:         A 1-dimensional kernel to convolve with the image.
+        i (int):        The row location to do the convolution at.
+        j (int):        The column location to process.
+        oritentation:   Axis where to apply kernel
 
     Returns:
         The result of convolving the provided kernel with the image at location i, j.
@@ -66,11 +67,6 @@ def convolve_pixel(img, kernel, i, j, orientation):
     if len(img.shape) != 2:
         raise ValueError(
             'Image argument to convolve_pixel should be one channel.')
-    #if len(kernel.shape) != 2:
-    #    raise ValueError('The kernel should be two dimensional.')
-    #if kernel.shape[0] % 2 != 1 or kernel.shape[1] % 2 != 1:
-    #    raise ValueError(
-    #        'The size of the kernel should not be even, but got shape %s' % (str(kernel.shape)))
 
     k = int((kernel.shape[0] - 1) / 2)
 
@@ -107,23 +103,23 @@ def convolve_pixel(img, kernel, i, j, orientation):
         result = np.sum(np.array(values))
         return result
 
-def convolve(img, d1, d2):
+def convolve(img, kernel):
     """
     Convolves the provided kernel with the provided image and returns the results.
 
     Args:
         img:        A 2-dimensional ndarray input image.
-        kernel:     A 2-dimensional kernel to convolve with the image.
+        kernel:     A 1-dimensional kernel to convolve with the image.
 
     Returns:
-        The result of convolving the provided kernel with the image at location i, j.
+        The result of performing two convolutions using separable kernels.
     """
 
     intermediate = np.empty(img.shape)
 
     for i in range(0, img.shape[0]):
         for j in range(0, img.shape[1]):
-            pixel = convolve_pixel(img, d1, i, j, 'horizontal')
+            pixel = convolve_pixel(img, kernel, i, j, 'horizontal')
             intermediate[i][j] = pixel
 
     intermediate = np.array(np.around(intermediate), dtype=np.uint8)
@@ -131,7 +127,7 @@ def convolve(img, d1, d2):
     results = np.empty(img.shape)
     for i in range(0, img.shape[0]):
         for j in range(0, img.shape[1]):
-            pixel = convolve_pixel(intermediate, d1, i, j, 'vertical')
+            pixel = convolve_pixel(intermediate, kernel, i, j, 'vertical')
             results[i][j] = pixel
 
     results = np.array(np.around(results), dtype=np.uint8)
@@ -206,16 +202,15 @@ if __name__ == '__main__':
     logging.info('Computing a gaussian kernel with size %d and sigma %f' %
                  (args.k, args.sigma))
 
-    d1 = create_1d_kernel(args.k, args.sigma)
-    d2 = d1.T
+    kernel = create_1d_kernel(args.k, args.sigma)
 
     #convolve it with each input channel
     logging.info('Convolving the first channel')
-    r = convolve(r, d1, d2)
+    r = convolve(r, kernel)
     logging.info('Convolving the second channel')
-    g = convolve(g, d1, d2)
+    g = convolve(g, kernel)
     logging.info('Convolving the third channel')
-    b = convolve(b, d1, d2)
+    b = convolve(b, kernel)
 
     #merge the channels back
     logging.info('Merging results')
