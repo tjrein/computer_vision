@@ -77,7 +77,6 @@ def convolve_pixel(img, kernel, i, j, orientation):
     left = j - k
     right = j + k
 
-    #print(img.shape)
     if orientation is 'horizontal':
         if left < 0 or right >= img.shape[1]:
             outofbounds = True

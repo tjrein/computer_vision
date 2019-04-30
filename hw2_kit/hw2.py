@@ -121,7 +121,6 @@ def bilinear_interp(image, point):
     third = a * b * image[j+1][i+1]
     fourth = (1-a) * b * image[j][i+i]
 
-
     test = first + second + third + fourth
 
     return test
@@ -142,9 +141,21 @@ def apply_homography(H, points):
     """
 
     # TODO: First, transform the points to homogenous coordinates by adding a `1`
-    homogenous_points
+
+    print(points.shape)
+    ones = np.ones((points.shape[0], 1))
+    homogenous_points = np.hstack((points, ones))
 
     # TODO: Apply the homography
+
+    final_results = []
+    for pair in homogenous_points:
+        h_result = H @ pair
+        final_result = [h_result[0] / h_result[-1], h_result[1] / h_result[-1]]
+        final_results.append(final_result)
+
+    final_results = np.array(final_results)
+    return final_results
 
     # TODO: Convert the result back to cartesian coordinates and return the results
 
