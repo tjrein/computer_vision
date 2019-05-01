@@ -116,11 +116,10 @@ def bilinear_interp(image, point):
     # TODO: Take a linear combination of the four points weighted according to the inverse area around them
     # (i.e., the formula for bilinear interpolation)
 
-
     first = (1 - a) * (1 - b) * image[j][i]
     second = a * (1-b) * image[j+1][i]
     third = a * b * image[j+1][i+1]
-    fourth = (1-a) * b * image[j][i+i]
+    fourth = (1-a) * b * image[j][i+1]
 
     test = first + second + third + fourth
 
@@ -190,7 +189,7 @@ def warp_homography(source, target_shape, Hinv):
             h_result = apply_homography(Hinv, np.array([x,y]).reshape((1,2)))[0]
             i, j = h_result
 
-            if j >= orig_width or i >= orig_height:
+            if j >= orig_width or i >= orig_height or j < 0 or i < 0:
                 continue
 
             # TODO: Otherwise, set the pixel at this location to the bilinear interpolation result.
@@ -237,7 +236,7 @@ def rectify_image(image, source_points, target_points, crop):
 
     bounding_box = np.array([
         [0,0],
-        [image.shape[1], 0 ],
+        [image.shape[1], 0],
         [0, image.shape[0]],
         [image.shape[1], image.shape[0]]
     ])
@@ -266,8 +265,7 @@ def rectify_image(image, source_points, target_points, crop):
     # the warped bounding box.
 
     rectified_bounding_box = apply_homography(T, warped_bounding_box)
-
-    print("rectified_bounding_box", rectified_bounding_box)
+    #rectified_bounding_box = T @ warped_bounding_box
 
     # TODO: Compute the inverse homography that maps the rectified bounding box to the original bounding box
 
@@ -275,7 +273,7 @@ def rectify_image(image, source_points, target_points, crop):
 
     inverseH = compute_H(rectified_bounding_box, bounding_box)
 
-    test = apply_homography(inverseH, rectified_bounding_box)
+    #test = apply_homography(inverseH, rectified_bounding_box)
 
 
     # Determine the shape of the output image
