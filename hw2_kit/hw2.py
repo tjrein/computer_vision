@@ -192,8 +192,6 @@ def warp_homography(source, target_shape, Hinv):
             if j >= orig_width or i >= orig_height or j < 0 or i < 0:
                 continue
 
-            # TODO: Otherwise, set the pixel at this location to the bilinear interpolation result.
-
             result[x][y] = bilinear_interp(source, h_result )
     #return the output image
 
@@ -282,14 +280,16 @@ def rectify_image(image, source_points, target_points, crop):
         # rectified bounding box
         return
     else:
-        max_y = int(np.around(np.amax(rectified_bounding_box[:, 0])))
-        max_x = int(np.around(np.amax(rectified_bounding_box[:, 1])))
+        max_x = int(np.around(np.amax(rectified_bounding_box[:, 0])))
+        max_y = int(np.around(np.amax(rectified_bounding_box[:, 1])))
         # TODO: Determine the side of the final output image as the maximum X and Y values of the
         # rectified bounding box
-        shape = (max_y, max_x, 3)
+        shape = (max_x, max_y, 3)
 
     rectified_image = warp_homography(image, shape, inverseH)
-    return rectified_image
+    print("rectified_image", rectified_image.shape)
+    print("transpose shaoe", rectified_image.transpose(1, 0, 2))
+    return rectified_image.transpose(1, 0, 2)
 
 
     # TODO: Finally call warp_homography to rectify the image and return the result
