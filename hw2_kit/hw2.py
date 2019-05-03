@@ -183,6 +183,7 @@ def warp_homography(source, target_shape, Hinv):
 
 
     # TODO: Iterate over all pixels in the target image
+    #TODO FIX THIS
     for x in range(width):
         for y in range(height):
             # TODO: apply the homography to the x,y location
@@ -192,7 +193,8 @@ def warp_homography(source, target_shape, Hinv):
             if j >= orig_width or i >= orig_height or j < 0 or i < 0:
                 continue
 
-            result[x][y] = bilinear_interp(source, h_result )
+
+            result[y][x] = bilinear_interp(source, h_result )
     #return the output image
 
     return result
@@ -286,14 +288,9 @@ def rectify_image(image, source_points, target_points, crop):
         # rectified bounding box
         shape = (max_x, max_y, 3)
 
-    rectified_image = warp_homography(image, shape, inverseH)
-    print("rectified_image", rectified_image.shape)
-    print("transpose shaoe", rectified_image.transpose(1, 0, 2))
-    return rectified_image.transpose(1, 0, 2)
-
-
     # TODO: Finally call warp_homography to rectify the image and return the result
-
+    rectified_image = warp_homography(image, shape, inverseH)
+    return rectified_image.transpose(1, 0, 2)
 
 def blend_with_mask(source, target, mask):
     """
@@ -317,6 +314,23 @@ def blend_with_mask(source, target, mask):
 
     # TODO: Convert the result to be the same type as source and return the result
 
+    print("MASK", mask.shape)
+    print("source", source.shape)
+    print("target", target.shape)
+
+    normalized_mask = mask / 255
+
+    print("np max normalized", np.amax(normalized_mask))
+
+    result = (1 - normalized_mask) * target + normalized_mask * source
+
+
+    result = result.astype(source.dtype)
+
+    return result
+
+
+
 
 def composite_image(source, target, source_pts, target_pts, mask):
     """
@@ -331,10 +345,17 @@ def composite_image(source, target, source_pts, target_pts, mask):
         mask:       A greyscale image representing the mast to use.
     """
     # TODO: Compute the homography to warp points from the target to the source coordinate frame.
+    H = compute_H(target_pts, source_pts)
 
     # TODO: Warp the source image to a new image (that has the same shape as target) using the homography.
+    shape = (target.shape[0], target.shape[1], 3)
+
+    warped_image = warp_homography(source, shape, H)
 
     # TODO: Blend the warped images and return them.
+    result = blend_with_mask(warped_image, target, mask)
+
+    return result
 
 
 def rectify(args):
@@ -364,6 +385,9 @@ def rectify(args):
 
     # save the result
     logging.info('Saving result to %s' % (args.output))
+
+    print("WHAT THE HELL", result.shape, result.dtype)
+
     imageio.imwrite(args.output, result)
 
 
@@ -401,6 +425,7 @@ def composite(args):
 
     # save the result
     logging.info('Saving result to %s' % (args.output))
+    print("WHAT THE FUCK", result.shape, result.dtype)
     imageio.imwrite(args.output, result)
 
 
