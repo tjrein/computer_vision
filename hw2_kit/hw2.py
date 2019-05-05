@@ -117,9 +117,11 @@ def bilinear_interp(image, point):
     # (i.e., the formula for bilinear interpolation)
 
     first = (1 - a) * (1 - b) * image[j][i]
-    second = a * (1-b) * image[j+1][i]
+    second = a * (1-b) * image[j][i+1]
     third = a * b * image[j+1][i+1]
-    fourth = (1-a) * b * image[j][i+1]
+    fourth = (1-a) * b * image[j+1][i]
+
+
 
     test = first + second + third + fourth
 
@@ -238,26 +240,29 @@ def rectify_image(image, source_points, target_points, crop):
 
     bounding_box_xy = np.array([
         [0,0],
-        [image.shape[1] - 1, 0],
-        [0, image.shape[0] -1],
-        [image.shape[1] -1, image.shape[0] -1]
+        [image.shape[1], 0],
+        [0, image.shape[0]],
+        [image.shape[1], image.shape[0]]
     ])
 
 
 
     warped_bounding_box = apply_homography(H, bounding_box_xy)
 
-    print("warped_bounding_box", warped_bounding_box)
+    sorted_x = np.sort(warped_bounding_box[:, 0])
+    sorted_y = np.sort(warped_bounding_box[:, 1])
 
-
-    # Find the min_x and min_y values in the warped space to keep.
     if crop:
-        # TODO: pick the second smallest values of x and y in the warped bounding box
-        return
+        min_x = sorted_x[1]
+        min_y = sorted_y[1]
     else:
         # TODO: Compute the min x and min y of the warped bounding box
-        min_x = np.amin(warped_bounding_box[:, 0])
-        min_y = np.amin(warped_bounding_box[:, 1])
+
+        #min_x = np.amin(warped_bounding_box[:, 0])
+        #min_y = np.amin(warped_bounding_box[:, 1])
+
+        min_x = sorted_x[0]
+        min_y = sorted_y[0]
 
 
     # TODO: Compute a translation matrix T such that min_x and min_y will go to zero
@@ -271,41 +276,34 @@ def rectify_image(image, source_points, target_points, crop):
     # TODO: Compute the rectified bounding box by applying the translation matrix to
     # the warped bounding box.
 
-    rectified_bounding_box = np.around(apply_homography(T, warped_bounding_box))
+    rectified_bounding_box = apply_homography(T, warped_bounding_box)
 
-
-    print("RECTIFIED_BOUNDING_BOX", rectified_bounding_box)
 
     #rectified_bounding_box = T @ warped_bounding_box
 
     # TODO: Compute the inverse homography that maps the rectified bounding box to the original bounding box
 
-    #inverseH = np.linalg.inv(H)
 
     inverseH = compute_H(rectified_bounding_box, bounding_box_xy)
 
-    #test = apply_homography(inverseH, rectified_bounding_box)
-
 
     # Determine the shape of the output image
+    sorted_rbb_x = np.sort(rectified_bounding_box[:, 0])
+    sorted_rbb_y = np.sort(rectified_bounding_box[:, 1])
+
+
     if crop:
         # TODO: Determine the side of the final output image as the second highest X and Y values of the
         # rectified bounding box
-        return
+        max_x = sorted_rbb_x[-2]
+        max_y = sorted_rbb_y[-2]
     else:
-        max_x = int(np.amax(rectified_bounding_box[:, 0]))
-        max_y = int(np.amax(rectified_bounding_box[:, 1]))
-        # TODO: Determine the side of the final output image as the maximum X and Y values of the
-        # rectified bounding box
-        shape = (max_y, max_x, 3)
+        #max_x = int(np.amax(rectified_bounding_box[:, 0]))
+        #max_y = int(np.amax(rectified_bounding_box[:, 1]))
+        max_x = sorted_rbb_x[-1]
+        max_y = sorted_rbb_y[-1]
 
-        print("SHAPE", shape)
-
-
-
-
-        #return
-
+    shape = (int(np.around(max_y)), int(np.around(max_x)), 3)
 
     # TODO: Finally call warp_homography to rectify the image and return the result
     rectified_image = warp_homography(image, shape, inverseH)
@@ -334,22 +332,13 @@ def blend_with_mask(source, target, mask):
 
     # TODO: Convert the result to be the same type as source and return the result
 
-    print("MASK", mask.shape)
-    print("source", source.shape)
-    print("target", target.shape)
-
     normalized_mask = mask / 255
 
-    print("np max normalized", np.amax(normalized_mask))
-
     result = (1 - normalized_mask) * target + normalized_mask * source
-
 
     result = result.astype(source.dtype)
 
     return result
-
-
 
 
 def composite_image(source, target, source_pts, target_pts, mask):
@@ -447,7 +436,6 @@ def composite(args):
 
     # save the result
     logging.info('Saving result to %s' % (args.output))
-    print("WHAT THE FUCK", result.shape, result.dtype)
     imageio.imwrite(args.output, result)
 
 
