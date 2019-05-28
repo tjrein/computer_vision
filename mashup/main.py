@@ -6,6 +6,7 @@ import tensorflow.contrib.eager as tfe
 import tensorflow.keras.backend as K
 import matplotlib.pyplot as plt
 from tensorflow.keras.applications import vgg19
+from tensorflow.keras.preprocessing.image import load_img, save_img, img_to_array
 from tensorflow.keras.models import Model
 
 tf.enable_eager_execution()
@@ -26,12 +27,49 @@ def calculate_content_loss(content_features, constructed_img, content_model):
 
     return test_l_content
 
-def calculate_gradient(content_features, constructed_img, content_model):
+def calculate_style_loss(style_features, constructed_img, style_model):
+    const_style_features = style_model(constructed_img)
+
+    style_loss = 0
+    for i in range(len(style_features)):
+        feature_shape = style_features[i].shape.as_list()
+        N = feature_shape[-1]
+        M = feature_shape[1] * feature_shape[2]
+
+        const_gram = calculate_gram_matrix(const_style_features[i])
+        style_gram = calculate_gram_matrix(style_features[i])
+
+        test = K.sum(K.square(style_gram - const_gram))
+        factor = 1 / (4.0 * N**2 * M**2)
+        gram_error = factor * test
+        style_loss += gram_error
+
+    print("style_loss", style_loss)
+    return style_loss
+
+def calculate_content_gradient(content_features, constructed_img, content_model):
     with tf.GradientTape() as gradient_tape:
         loss = calculate_content_loss(content_features, constructed_img, content_model)
     return gradient_tape.gradient(loss, constructed_img)
 
+def calculate_style_gradient(style_features, constructed_img, style_model):
+    with tf.GradientTape() as gradient_tape:
+        loss = calculate_style_loss(style_features, constructed_img, style_model)
+    return gradient_tape.gradient(loss, constructed_img)
 
+
+def calculate_gram_matrix(features):
+    squeezed = K.squeeze(features, 0)
+    test = K.batch_flatten(K.permute_dimensions(squeezed, (2, 0, 1)))
+    #test = K.batch_flatten(K.permute_dimensions(squeezed, (2, 0, 1)))
+    other_test = K.dot(test, K.transpose(test))
+
+    num_channels = int(features.shape[3])
+    matrix = tf.reshape(features, shape=[-1, num_channels])
+
+    gram = tf.matmul(tf.transpose(matrix), matrix)
+
+    return gram
 
 content_img = load_image("./content1.jpg")
 style_img = load_image("./style_1_orig.jpg")
@@ -57,7 +95,7 @@ vgg = vgg19.VGG19(include_top=False, weights='imagenet')
 
 style_outputs = [vgg.get_layer(name).output for name in style_layers]
 content_outputs = [vgg.get_layer(name).output for name in content_layers]
-composite_outputs = style_outputs + content_outputs
+#composite_outputs = style_outputs + content_outputs
 
 
 content_model = Model(inputs=vgg.inputs, outputs=content_outputs)
@@ -71,17 +109,18 @@ content_features = content_model(content_img)
 #style features
 style_features = style_model(style_img)
 
-
+#use tfe.Variable so optimizer can update image
 constructed_img = tfe.Variable(constructed_img, dtype=tf.float32)
-#calculate_content_loss(content_features, constructed_img, content_model)
+opt = tf.train.AdamOptimizer(learning_rate=15.0)
 
-opt = tf.train.AdamOptimizer(learning_rate=2.0)
-for i in range(200):
-    gradients = calculate_gradient(content_features, constructed_img, content_model)
+#calculate_style_loss(style_features, constructed_img, style_model)
+
+
+for i in range(300):
+    gradients = calculate_style_gradient(style_features, constructed_img, style_model)
     opt.apply_gradients([(gradients, constructed_img)])
 
 new_output_img = np.squeeze(constructed_img.numpy(), axis=0)
-
 imageio.imwrite("./new_output_img.jpg", new_output_img)
 
 
