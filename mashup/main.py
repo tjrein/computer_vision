@@ -15,6 +15,24 @@ def load_image(filename):
     return np.float32(image)
 
 
+def calculate_content_loss(content_features, constructed_img, content_model):
+    const_content_features = content_model(constructed_img)
+
+    l_content = 0.5 * np.sum((content_features.numpy() - const_content_features.numpy()) ** 2)
+    test_l_content = 0.5 * K.sum(K.square(content_features - const_content_features))
+
+
+    print("test_l_content", test_l_content)
+
+    return test_l_content
+
+def calculate_gradient(content_features, constructed_img, content_model):
+    with tf.GradientTape() as gradient_tape:
+        loss = calculate_content_loss(content_features, constructed_img, content_model)
+    return gradient_tape.gradient(loss, constructed_img)
+
+
+
 content_img = load_image("./content1.jpg")
 style_img = load_image("./style_1_orig.jpg")
 
@@ -22,10 +40,18 @@ style_img = load_image("./style_1_orig.jpg")
 constructed_img = np.random.normal(size=(128, 128, 3))
 constructed_img -= constructed_img.min()
 constructed_img /= constructed_img.max()/255.0
-constructed_img = np.around(constructed_img).astype("uint8")
+constructed_img = np.around(constructed_img).astype("float32")
 
 content_layers = ['block4_conv2']
 style_layers = ['block1_conv1', 'block2_conv1', 'block3_conv1', 'block4_conv1', 'block5_conv1']
+
+#add dimension for tensorflow
+content_img =  np.expand_dims(content_img, axis=0)
+style_img = np.expand_dims(style_img, axis=0)
+constructed_img = np.expand_dims(constructed_img, axis=0)
+
+
+
 
 vgg = vgg19.VGG19(include_top=False, weights='imagenet')
 
@@ -34,18 +60,35 @@ content_outputs = [vgg.get_layer(name).output for name in content_layers]
 composite_outputs = style_outputs + content_outputs
 
 
-
 content_model = Model(inputs=vgg.inputs, outputs=content_outputs)
 style_model = Model(inputs=vgg.inputs, outputs=style_outputs)
-composite_model = Model(inputs=vgg.inputs, outputs=composite_outputs)
+#composite_model = Model(inputs=vgg.inputs, outputs=composite_outputs)
 
-num_style_layers = 5
+#content features
+content_features = content_model(content_img)
+#constructed_content_outputs = content_model(constructed_img)
 
-content_tensor =  np.expand_dims(content_img, axis=0)
-style_tensor = np.expand_dims(style_img, axis=0)
+#style features
+style_features = style_model(style_img)
 
-output_content = content_model(content_tensor)
-output_style = style_model(style_tensor)
+
+constructed_img = tfe.Variable(constructed_img, dtype=tf.float32)
+#calculate_content_loss(content_features, constructed_img, content_model)
+
+opt = tf.train.AdamOptimizer(learning_rate=2.0)
+for i in range(200):
+    gradients = calculate_gradient(content_features, constructed_img, content_model)
+    opt.apply_gradients([(gradients, constructed_img)])
+
+new_output_img = np.squeeze(constructed_img.numpy(), axis=0)
+
+imageio.imwrite("./new_output_img.jpg", new_output_img)
+
+
+
+
+#output_content = content_model(content_tensor)
+#output_style = style_model(style_tensor)
 
 #print("output content", output_content)
 #style_features = [style_layer for style_layer in output_style]
@@ -53,13 +96,13 @@ output_style = style_model(style_tensor)
 #print("style_features", content_features)
 #print("output style", output_style)
 
-stack_images = np.concatenate([style_tensor, content_tensor], axis=0)
-model_outputs = composite_model(stack_images)
-style_features = [style_layer[0] for style_layer in model_outputs[:num_style_layers]]
-content_features = [content_layer[1] for content_layer in model_outputs[num_style_layers:]]
+#stack_images = np.concatenate([style_tensor, content_tensor], axis=0)
+#model_outputs = composite_model(stack_images)
+#style_features = [style_layer[0] for style_layer in model_outputs[:num_style_layers]]
+#content_features = [content_layer[1] for content_layer in model_outputs[num_style_layers:]]
 
 
-print("content_features", content_features)
+
 
 #content_outputs = composite_model(content_tensor)
 
