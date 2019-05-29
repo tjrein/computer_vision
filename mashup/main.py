@@ -8,28 +8,44 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.applications import vgg19
 from tensorflow.keras.preprocessing.image import load_img, save_img, img_to_array
 from tensorflow.keras.models import Model
+import cv2
 
 tf.enable_eager_execution()
 
+height = 200
+width = 200
+
+def preprocess_image(img):
+    img = vgg19.preprocess_input(img)
+    return img
+
+def deprocess(x):
+    x[:, :, 0] += 103.939
+    x[:, :, 1] += 116.779
+    x[:, :, 2] += 123.68
+    # 'BGR'->'RGB'
+    x = x[:, :, ::-1]
+    x = np.clip(x, 0, 255).astype('uint8')
+    return x
+
 def load_image(filename):
-    image = Image.open(filename).resize((128, 128))
+    image = Image.open(filename).resize((height, width))
     return np.float32(image)
 
 
-def calculate_content_loss(content_features, constructed_img, content_model):
-    const_content_features = content_model(constructed_img)
-
-    l_content = 0.5 * np.sum((content_features.numpy() - const_content_features.numpy()) ** 2)
+def calculate_content_loss(content_features, const_content_features):
     test_l_content = 0.5 * K.sum(K.square(content_features - const_content_features))
-
-
-    print("test_l_content", test_l_content)
 
     return test_l_content
 
-def calculate_style_loss(style_features, constructed_img, style_model):
-    const_style_features = style_model(constructed_img)
+def calculate_gram_matrix(features):
+    squeezed = K.squeeze(features, 0)
+    test = K.batch_flatten(K.permute_dimensions(squeezed, (2, 0, 1)))
+    gram = K.dot(test, K.transpose(test))
 
+    return gram
+
+def calculate_style_loss(style_features, const_style_features):
     style_loss = 0
     for i in range(len(style_features)):
         feature_shape = style_features[i].shape.as_list()
@@ -42,10 +58,21 @@ def calculate_style_loss(style_features, constructed_img, style_model):
         test = K.sum(K.square(style_gram - const_gram))
         factor = 1 / (4.0 * N**2 * M**2)
         gram_error = factor * test
-        style_loss += gram_error
+        style_loss += gram_error * 1/5
 
-    print("style_loss", style_loss)
     return style_loss
+
+def calculate_complete_gradient(features_tup, models_tup, constructed_img):
+    content_features, style_features = features_tup
+    content_model, style_model = models_tup
+    with tf.GradientTape() as gradient_tape:
+        constructed_content_features = content_model(constructed_img)
+        constructed_style_features = style_model(constructed_img)
+
+        loss = 10 * calculate_content_loss(content_features, constructed_content_features) + \
+               100 * calculate_style_loss(style_features, constructed_style_features)
+
+    return gradient_tape.gradient(loss, constructed_img)
 
 def calculate_content_gradient(content_features, constructed_img, content_model):
     with tf.GradientTape() as gradient_tape:
@@ -57,25 +84,11 @@ def calculate_style_gradient(style_features, constructed_img, style_model):
         loss = calculate_style_loss(style_features, constructed_img, style_model)
     return gradient_tape.gradient(loss, constructed_img)
 
-
-def calculate_gram_matrix(features):
-    squeezed = K.squeeze(features, 0)
-    test = K.batch_flatten(K.permute_dimensions(squeezed, (2, 0, 1)))
-    #test = K.batch_flatten(K.permute_dimensions(squeezed, (2, 0, 1)))
-    other_test = K.dot(test, K.transpose(test))
-
-    num_channels = int(features.shape[3])
-    matrix = tf.reshape(features, shape=[-1, num_channels])
-
-    gram = tf.matmul(tf.transpose(matrix), matrix)
-
-    return gram
-
 content_img = load_image("./content1.jpg")
 style_img = load_image("./style_1_orig.jpg")
 
 #initial whitenoise img
-constructed_img = np.random.normal(size=(128, 128, 3))
+constructed_img = np.random.normal(size=(height, width, 3))
 constructed_img -= constructed_img.min()
 constructed_img /= constructed_img.max()/255.0
 constructed_img = np.around(constructed_img).astype("float32")
@@ -88,94 +101,52 @@ content_img =  np.expand_dims(content_img, axis=0)
 style_img = np.expand_dims(style_img, axis=0)
 constructed_img = np.expand_dims(constructed_img, axis=0)
 
-
-
+content_img = preprocess_image(content_img)
+style_img = preprocess_image(style_img)
+constructed_img = preprocess_image(constructed_img)
 
 vgg = vgg19.VGG19(include_top=False, weights='imagenet')
 
-style_outputs = [vgg.get_layer(name).output for name in style_layers]
-content_outputs = [vgg.get_layer(name).output for name in content_layers]
-#composite_outputs = style_outputs + content_outputs
+style_outputs = []
+for layer_name in style_layers:
+    style_outputs.append(vgg.get_layer(layer_name).output)
 
+content_outputs = []
+for layer_name in content_layers:
+    content_outputs.append(vgg.get_layer(layer_name).output)
 
 content_model = Model(inputs=vgg.inputs, outputs=content_outputs)
 style_model = Model(inputs=vgg.inputs, outputs=style_outputs)
-#composite_model = Model(inputs=vgg.inputs, outputs=composite_outputs)
 
 #content features
 content_features = content_model(content_img)
-#constructed_content_outputs = content_model(constructed_img)
 
 #style features
 style_features = style_model(style_img)
 
 #use tfe.Variable so optimizer can update image
-constructed_img = tfe.Variable(constructed_img, dtype=tf.float32)
-opt = tf.train.AdamOptimizer(learning_rate=15.0)
+constructed_img = tfe.Variable(style_img, dtype=tf.float32)
+opt = tf.train.AdamOptimizer(learning_rate=1.0)
 
-#calculate_style_loss(style_features, constructed_img, style_model)
-
-
-for i in range(300):
-    gradients = calculate_style_gradient(style_features, constructed_img, style_model)
+for i in range(900):
+    features_tup = (content_features, style_features)
+    models_tup = (content_model, style_model)
+    gradients = calculate_complete_gradient(features_tup, models_tup, constructed_img)
     opt.apply_gradients([(gradients, constructed_img)])
 
 new_output_img = np.squeeze(constructed_img.numpy(), axis=0)
-imageio.imwrite("./new_output_img.jpg", new_output_img)
+x = new_output_img.copy()
+x = deprocess(x)
 
-
-
-
-#output_content = content_model(content_tensor)
-#output_style = style_model(style_tensor)
-
-#print("output content", output_content)
-#style_features = [style_layer for style_layer in output_style]
-#content_feature = [content_layer for content_layer in output_content]
-#print("style_features", content_features)
-#print("output style", output_style)
-
-#stack_images = np.concatenate([style_tensor, content_tensor], axis=0)
-#model_outputs = composite_model(stack_images)
-#style_features = [style_layer[0] for style_layer in model_outputs[:num_style_layers]]
-#content_features = [content_layer[1] for content_layer in model_outputs[num_style_layers:]]
-
-
-
-
-#content_outputs = composite_model(content_tensor)
-
-#print("content_outputs", content_outputs)
-
-#print("constructed_img", content_tensor)
-#print("dtypes", content_img.dtype, style_img.dtype, constructed_img.dtype)
-
-
-#imageio.imwrite("./test_output.jpg", content_img)
-
-#imageio.imwrite("./style1_cropped.jpg", style_img)
+imageio.imwrite("./test_output_img3.jpg", x)
 
 
 
 
 
 
-#w1 = tfe.Variable(2.0)
-#w2 = tfe.Variable(3.0)
 
-#def weighted_sum(x1, x2):
-#    return w1 * x1 + w2 * x2
 
-#s = weighted_sum(5., 7.)
-#print(s) # 31
-
-#with tf.GradientTape() as tape:
-#    s = weighted_sum(5., 7.)
-
-#[w1_grad] = tape.gradient(s, [w1])
-#print(w1_grad.numpy()) # 5.0 = gradient of s with regards to w1 = x1
-
-#[test_w1_grad] = K.gradients(s, [w1])
-
-#with tf.Session() as sess:
-#    print(sess.run(test_w1_grad))
+#num_channels = int(features.shape[3])
+#matrix = tf.reshape(features, shape=[-1, num_channels])
+#gram = tf.matmul(tf.transpose(matrix), matrix)
